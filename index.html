@@ -1,0 +1,286 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NFL Pick'em League</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101827;color:white;font-family:Arial,sans-serif}
+header{background:#087b45;padding:25px 18px;text-align:center}
+header h1{margin:0;font-size:27px}
+header p{margin:8px 0 0}
+main{max-width:650px;margin:auto;padding:18px}
+.card{background:#1d293b;padding:18px;border-radius:14px;margin:15px 0}
+input,select{width:100%;padding:14px;margin:8px 0;background:#101827;color:white;border:1px solid #526078;border-radius:8px;font-size:16px}
+button{padding:13px;border:0;border-radius:8px;background:#087b45;color:white;font-size:16px;font-weight:bold;margin:5px 3px;cursor:pointer}
+button:disabled{opacity:.4}
+.secondary{background:#35445b}
+.team{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid #39465a;padding:12px 0}
+.team button{flex:1;margin:0}
+.selected{background:#e3a52a;color:#172033}
+.small{color:#b9c5d5;font-size:13px}
+.hidden{display:none}
+h2{margin-top:5px}
+#message{color:#f5c65c;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<header>
+<h1>🏈 NFL PICK'EM</h1>
+<p>Pick winners. Compete with friends. Win bragging rights!</p>
+</header>
+<main>
+<div id="message"></div>
+
+<section id="login" class="card">
+<h2>Welcome, Football Fans!</h2>
+<p>Enter your name to get started.</p>
+<input id="playerName" placeholder="Your name">
+<button onclick="start()">Enter League</button>
+</section>
+
+<section id="lobby" class="hidden">
+<div class="card">
+<h2>Welcome, <span id="player"></span>!</h2>
+<button onclick="createGroup()">Create a League</button>
+<hr>
+<h3>Join a League</h3>
+<input id="joinCode" placeholder="Enter league code">
+<button onclick="joinGroup()">Join League</button>
+</div>
+<div id="myGroups" class="card">
+<h3>Your Leagues</h3>
+<div id="groupList"></div>
+</div>
+</section>
+
+<section id="league" class="hidden">
+<div class="card">
+<button class="secondary" onclick="back()">← My Leagues</button>
+<h2 id="leagueName"></h2>
+<p>League code: <strong id="code"></strong></p>
+<button class="secondary" onclick="copyCode()">Copy Invite Code</button>
+</div>
+
+<div class="card">
+<h2>Weekly Picks</h2>
+<label for="week">Choose NFL week</label>
+<select id="week" onchange="loadGames()"></select>
+<div id="games">Loading games...</div>
+</div>
+
+<div class="card">
+<h2>🏆 League Leaderboard</h2>
+<div id="leaderboard">Loading scores...</div>
+<p class="small">Correct picks are counted after game winners are entered.</p>
+</div>
+</section>
+</main>
+
+<script>
+const URL = "https://udywbuqqxierptmhivrn.supabase.co";
+const KEY = "sb_publishable_W2l_9_01wW9HPZYPWSbQhQ_VXevD69W";
+const db = supabase.createClient(URL, KEY);
+
+let userId = null;
+let playerName = "";
+let currentGroup = null;
+let currentGames = [];
+let currentPicks = {};
+
+function message(t){
+ document.getElementById("message").textContent=t;
+}
+function show(id){
+ ["login","lobby","league"].forEach(x=>
+ document.getElementById(x).classList.add("hidden"));
+ document.getElementById(id).classList.remove("hidden");
+}
+function safe(t){
+ return String(t ?? "").replace(/[&<>"']/g,c=>({
+ "&":"&amp;","<":"&lt;",">":"&gt;",
+ '"':"&quot;","'":"&#39;"
+ }[c]));
+}
+
+async function initialize(){
+ const {data:{session}}=await db.auth.getSession();
+ if(session) userId=session.user.id;
+ if(!userId){
+  const {data,error}=await db.auth.signInAnonymously();
+  if(error){message(error.message);return;}
+  userId=data.user.id;
+ }
+ playerName=localStorage.getItem("pickem_name")||"";
+ if(playerName){
+  document.getElementById("player").textContent=playerName;
+  show("lobby");
+  await getGroups();
+ }
+}
+async function start(){
+ const name=document.getElementById("playerName").value.trim();
+ if(!name){message("Please enter your name.");return;}
+ playerName=name;
+ localStorage.setItem("pickem_name",name);
+ document.getElementById("player").textContent=name;
+ message("");
+ show("lobby");
+ await getGroups();
+}
+async function createGroup(){
+ const name=prompt("What would you like to name your league?");
+ if(!name || !name.trim())return;
+ const code=Math.random().toString(36).substring(2,8).toUpperCase();
+ const {data,error}=await db.from("pick_groups").insert({
+  name:name.trim(),join_code:code,created_by:userId
+ }).select().single();
+ if(error){message(error.message);return;}
+ const {error:memberError}=await db.from("group_members").insert({
+  group_id:data.id,user_id:userId,display_name:playerName
+ });
+ if(memberError){message(memberError.message);return;}
+ await getGroups();
+ openGroup(data);
+}
+async function joinGroup(){
+ const code=document.getElementById("joinCode").value.trim().toUpperCase();
+ if(!code){message("Enter a league code.");return;}
+ const {data,error}=await db.rpc("join_group",{
+  p_join_code:code,p_display_name:playerName
+ });
+ if(error){message(error.message);return;}
+ await getGroups();
+ const {data:group,error:e}=await db.from("pick_groups")
+  .select("*").eq("id",data).single();
+ if(e){message(e.message);return;}
+ openGroup(group);
+}
+async function getGroups(){
+ const {data:members,error}=await db.from("group_members")
+  .select("group_id").eq("user_id",userId);
+ if(error){message(error.message);return;}
+ const ids=(members||[]).map(x=>x.group_id);
+ if(!ids.length){
+  document.getElementById("groupList").textContent="No leagues yet. Create or join one!";
+  return;
+ }
+ const {data,error:e}=await db.from("pick_groups")
+  .select("*").in("id",ids);
+ if(e){message(e.message);return;}
+ document.getElementById("groupList").innerHTML=(data||[]).map(g=>
+  `<button onclick="chooseGroup('${g.id}')">${safe(g.name)} →</button>`
+ ).join("");
+}
+async function chooseGroup(id){
+ const {data,error}=await db.from("pick_groups")
+  .select("*").eq("id",id).single();
+ if(error){message(error.message);return;}
+ openGroup(data);
+}
+function openGroup(group){
+ currentGroup=group;
+ document.getElementById("leagueName").textContent=group.name;
+ document.getElementById("code").textContent=group.join_code;
+ const select=document.getElementById("week");
+ if(!select.options.length){
+  for(let i=1;i<=18;i++){
+   const o=document.createElement("option");
+   o.value=i;o.textContent="Week "+i;select.appendChild(o);
+  }
+ }
+ show("league");
+ loadGames();
+ loadLeaderboard();
+}
+async function copyCode(){
+ try{
+  await navigator.clipboard.writeText(currentGroup.join_code);
+  message("League code copied! Share it with your friends.");
+ }catch(e){message("Your league code is "+currentGroup.join_code);}
+}
+function back(){show("lobby");getGroups();}
+
+async function loadGames(){
+ if(!currentGroup)return;
+ const week=Number(document.getElementById("week").value);
+ const box=document.getElementById("games");
+ box.textContent="Loading games...";
+ const {data:games,error}=await db.from("games")
+  .select("*").eq("week",week).order("kickoff_at");
+ if(error){box.textContent=error.message;return;}
+ currentGames=games||[];
+ const {data:picks,error:e}=await db.from("picks")
+  .select("*").eq("group_id",currentGroup.id).eq("user_id",userId);
+ if(e){box.textContent=e.message;return;}
+ currentPicks={};
+ (picks||[]).forEach(p=>currentPicks[p.game_id]=p.picked_team);
+ if(!currentGames.length){
+  box.innerHTML="<p>No games have been added for Week "+week+" yet.</p><p class='small'>The league schedule needs to be loaded before picks can be made.</p>";
+  return;
+ }
+ box.innerHTML=currentGames.map(g=>{
+  const locked=g.kickoff_at && new Date(g.kickoff_at)<=new Date();
+  const chosen=currentPicks[g.id];
+  return `<div class="team">
+   <button ${locked?"disabled":""}
+    class="${chosen===g.away_team?"selected":""}"
+    onclick="pick('${g.id}','${safe(g.away_team).replace(/'/g,"&#39;")}')">
+    ${safe(g.away_team)}
+   </button>
+   <span>VS</span>
+   <button ${locked?"disabled":""}
+    class="${chosen===g.home_team?"selected":""}"
+    onclick="pick('${g.id}','${safe(g.home_team).replace(/'/g,"&#39;")}')">
+    ${safe(g.home_team)}
+   </button>
+  </div>
+  <p class="small">${g.kickoff_at?new Date(g.kickoff_at).toLocaleString():"Time TBD"} · ${safe(g.status)}</p>`;
+ }).join("");
+}
+async function pick(gameId,team){
+ const game=currentGames.find(g=>g.id===gameId);
+ if(game?.kickoff_at && new Date(game.kickoff_at)<=new Date()){
+  message("This game has already started. Picks are closed.");return;
+ }
+ const {error}=await db.from("picks").upsert({
+  group_id:currentGroup.id,game_id:gameId,
+  user_id:userId,picked_team:team
+ },{onConflict:"group_id,game_id,user_id"});
+ if(error){message(error.message);return;}
+ message("Pick saved: "+team);
+ await loadGames();
+ await loadLeaderboard();
+}
+async function loadLeaderboard(){
+ if(!currentGroup)return;
+ const box=document.getElementById("leaderboard");
+ const {data:members,error}=await db.from("group_members")
+  .select("user_id,display_name").eq("group_id",currentGroup.id);
+ if(error){box.textContent=error.message;return;}
+ const {data:picks,error:e}=await db.from("picks")
+  .select("user_id,game_id,picked_team")
+  .eq("group_id",currentGroup.id);
+ if(e){box.textContent=e.message;return;}
+ const {data:games,error:ge}=await db.from("games")
+  .select("id,winner_team").not("winner_team","is",null);
+ if(ge){box.textContent=ge.message;return;}
+ const winners={};
+ (games||[]).forEach(g=>winners[g.id]=g.winner_team);
+ const scores=(members||[]).map(m=>({
+  name:m.display_name,
+  score:(picks||[]).filter(p=>
+   p.user_id===m.user_id && winners[p.game_id]===p.picked_team
+  ).length
+ })).sort((a,b)=>b.score-a.score);
+ box.innerHTML=scores.map((s,i)=>
+  `<p>${i===0?"🏆":(i+1)+ "."} <strong>${safe(s.name)}</strong> — ${s.score} wins</p>`
+ ).join("")||"No players yet.";
+}
+initialize();
+</script>
+</body>
+</html>
