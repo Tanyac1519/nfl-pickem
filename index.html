@@ -129,7 +129,7 @@ async function start(){
 await authPromise;
 if(!userId){message("Database connection failed. Please try again.");return;}
  playerName=name;
- localStorage.setItem("pickem_name",name);
+try{localStorage.setItem("pickem_name",name);}catch(e){}
  document.getElementById("player").textContent=name;
  message("");
  show("lobby");
