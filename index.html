@@ -124,6 +124,8 @@ async function initialize(){
 async function start(){
  const name=document.getElementById("playerName").value.trim();
  if(!name){message("Please enter your name.");return;}
+await authPromise;
+if(!userId){message("Database connection failed. Please try again.");return;}
  playerName=name;
  localStorage.setItem("pickem_name",name);
  document.getElementById("player").textContent=name;
@@ -280,7 +282,7 @@ async function loadLeaderboard(){
   `<p>${i===0?"🏆":(i+1)+ "."} <strong>${safe(s.name)}</strong> — ${s.score} wins</p>`
  ).join("")||"No players yet.";
 }
-initialize();
+const authPromise = initialize();
 </script>
 </body>
 </html>
