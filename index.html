@@ -123,21 +123,6 @@ async function initialize(){
   return false;
  }
 }
-
- const {data:{session}}=await db.auth.getSession();
- if(session) userId=session.user.id;
- if(!userId){
-  const {data,error}=await db.auth.signInAnonymously();
-  if(error){message(error.message);return;}
-  userId=data.user.id;
- }
- playerName=localStorage.getItem("pickem_name")||"";
- if(playerName){
-  document.getElementById("player").textContent=playerName;
-  show("lobby");
-  await getGroups();
- }
-}
 async function start(){
  const name=document.getElementById("playerName").value.trim();
  if(!name){message("Please enter your name.");return;}
