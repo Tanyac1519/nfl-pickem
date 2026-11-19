@@ -93,7 +93,7 @@ let playerName = "";
 let currentGroup = null;
 let currentGames = [];
 let currentPicks = {};
-
+let authPromise = null;
 function message(t){
  document.getElementById("message").textContent=t;
 }
@@ -287,7 +287,7 @@ async function loadLeaderboard(){
   `<p>${i===0?"🏆":(i+1)+ "."} <strong>${safe(s.name)}</strong> — ${s.score} wins</p>`
  ).join("")||"No players yet.";
 }
-const authPromise = initialize();
+ authPromise = initialize();
 </script>
 </body>
 </html>
