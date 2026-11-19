@@ -93,7 +93,7 @@ let playerName = "";
 let currentGroup = null;
 let currentGames = [];
 let currentPicks = {};
-let authPromise = null;
+
 function message(t){
  document.getElementById("message").textContent=t;
 }
@@ -129,8 +129,8 @@ async function initialize(){
 async function start(){
  const name=document.getElementById("playerName").value.trim();
  if(!name){message("Please enter your name.");return;}
-await authPromise;
-if(!userId){message("Database connection failed. Please try again.");return;}
+const ready=await initialize();
+if(!ready || !userId){message("Database connection failed. Please try again.");return;}
  playerName=name;
 try{localStorage.setItem("pickem_name",name);}catch(e){}
  document.getElementById("player").textContent=name;
@@ -287,7 +287,7 @@ async function loadLeaderboard(){
   `<p>${i===0?"🏆":(i+1)+ "."} <strong>${safe(s.name)}</strong> — ${s.score} wins</p>`
  ).join("")||"No players yet.";
 }
- authPromise = initialize();
+ initialize();
 </script>
 </body>
 </html>
