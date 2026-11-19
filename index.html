@@ -40,7 +40,9 @@ h2{margin-top:5px}
 <p>Enter your name to get started.</p>
 <input id="playerName" placeholder="Your name">
 
-<button onclick="alert('The button is working!'); start()">Enter League</button>
+
+
+<button onclick="start().catch(error=>message('App error: '+error.message))">Enter League</button>
 </section>
 
 <section id="lobby" class="hidden">
