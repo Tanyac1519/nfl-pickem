@@ -106,7 +106,24 @@ function safe(t){
  }[c]));
 }
 
+ 
 async function initialize(){
+ try{
+  const {data:{session},error:sessionError}=await db.auth.getSession();
+  if(sessionError) throw sessionError;
+  if(session) userId=session.user.id;
+  if(!userId){
+   const {data,error}=await db.auth.signInAnonymously();
+   if(error) throw error;
+   userId=data.user.id;
+  }
+  return true;
+ }catch(error){
+  message("Connection problem: "+(error.message||String(error)));
+  return false;
+ }
+}
+
  const {data:{session}}=await db.auth.getSession();
  if(session) userId=session.user.id;
  if(!userId){
