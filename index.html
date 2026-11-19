@@ -130,7 +130,7 @@ async function start(){
  const name=document.getElementById("playerName").value.trim();
  if(!name){message("Please enter your name.");return;}
 const ready=await initialize();
-if(!ready || !userId){message("Database connection failed. Please try again.");return;}
+if(!ready || !userId)return;
  playerName=name;
 try{localStorage.setItem("pickem_name",name);}catch(e){}
  document.getElementById("player").textContent=name;
